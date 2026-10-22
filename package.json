@@ -1,1 +1,14 @@
-{"name":"kyoto-autumn","version":"1.0.0","private":true,"type":"module","scripts":{"start":"node server.js","test":"node --test"},"engines":{"node":">=22"}}
+{
+  "name": "kyoto-autumn",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "sync:foliage": "node scripts/sync-foliage.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

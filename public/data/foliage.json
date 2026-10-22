@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "results": [
+    {
+      "id": "tofukuji",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "sennyuji",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "kiyomizu",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "eikando",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "nanzenji",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "bishamondo",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "nara",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "kasuga",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "isuien",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "yoshikien",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "shogunzuka",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "gioji",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    },
+    {
+      "id": "jojakkoji",
+      "state": "not_configured",
+      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+    }
+  ]
+}
