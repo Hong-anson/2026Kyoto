@@ -1,5 +1,7 @@
 import {spots} from './spots.js';
-import {validateLiveFeed} from './foliage-feed.js';
+import {defaultSheetFeedUrl,foliageReferenceUrls} from './source-config.js';
+import {validateLiveFeed,validSheetFeedUrl} from './foliage-feed.js';
+import {validateWeatherFeed,fetchWeatherFeed,weatherCodeLabel} from './weather-feed.js';
 
 const $ = id => document.getElementById(id);
 const byId = id => spots.find(s => s.id === id);
@@ -9,6 +11,11 @@ const labels = {'青葉':'🟢 青葉','轉黃':'🟡 微黃','轉紅':'🟠 轉
 let plan = [['tofukuji','sennyuji','kiyomizu'],['nanzenji','eikando','bishamondo'],['nara','kasuga','isuien']];
 let observations = {}, manual = {}, bookings = {}, originals = {}, day = 0, bookingId = '';
 let liveRows = {}, feedState = 'loading', checkedAt = null, refreshPending = null;
+let weatherRows = {}, weatherState = 'loading', weatherPending = null;
+let feedGeneration = 0;
+const storedSheetUrl = load('kyoto-sheet-url', '');
+let sheetUrl = validSheetFeedUrl(storedSheetUrl) ? storedSheetUrl : '';
+let weatherEnabled = load('kyoto-weather-enabled', true) !== false;
 function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
 const saved = load('kyoto-plan', null);
 if (Array.isArray(saved) && saved.length === 3 && saved.every(a => Array.isArray(a) && a.length === 3 && a.every(byId))) plan = saved;
@@ -17,6 +24,13 @@ for (const [id, value] of Object.entries(load('kyoto-bookings', {}))) if (byId(i
 for (const [key, id] of Object.entries(load('kyoto-originals', {}))) if (/^[0-2]-[0-2]$/.test(key) && byId(id)) originals[key] = id;
 try { observations = validate(load('kyoto-observations', [])); } catch {}
 try { const d = localStorage.getItem('kyoto-date'); if (/^\d{4}-\d{2}-\d{2}$/.test(d)) $('date').value = d; } catch {}
+$('sheet-url').value = sheetUrl;
+$('weather-enabled').checked = weatherEnabled;
+try {
+  const cached = load('kyoto-live-cache', null);
+  if (cached?.url === (sheetUrl || defaultSheetFeedUrl)) liveRows = Object.fromEntries(validateLiveFeed(cached.feed, spots.map(s=>s.id)).results.map(row=>[row.id,row]));
+} catch {}
+try { weatherRows = Object.fromEntries(validateWeatherFeed(load('kyoto-weather-cache', null)).results.map(row=>[row.id,row])); } catch {}
 function notify(text) { $('message').textContent = text; $('message').style.display = 'block'; clearTimeout(notify.timer); notify.timer = setTimeout(() => $('message').style.display = 'none', 6000); }
 function store(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { notify('瀏覽器無法儲存；資料僅保留於目前頁面。'); return false; } }
 function persist() { store('kyoto-plan', plan); store('kyoto-originals', originals); }
@@ -41,22 +55,90 @@ function obs(s) {
   const o = m ? {status:m.status, observedAt:m.updatedAt, manual:true} : sourced;
   return o ? {...o, stale:Date.now() - Date.parse(o.observedAt) > 86400000} : null;
 }
-function origin(o) { return o?.manual ? '手動標記' : o?.automatic ? '自動來源' : '匯入觀測'; }
+function origin(o) { return o?.manual ? '手動標記' : o?.automatic ? o.recordingMethod === 'manual' ? '來源人工整理' : o.recordingMethod === 'automatic' ? '自動擷取來源' : '同步來源（記錄方式未註明）' : '匯入觀測'; }
+function keepPrevious(previous, incoming, message) {
+  const rows = Object.fromEntries(incoming.map(row=>[row.id,row]));
+  for (const {id} of spots) {
+    if (rows[id]?.state === 'ok' && previous[id]?.state === 'ok') {
+      const oldTime = Date.parse(previous[id].observedAt || previous[id].current?.modelAt);
+      const nextTime = Date.parse(rows[id].observedAt || rows[id].current?.modelAt);
+      if (nextTime < oldTime || (nextTime === oldTime && Date.parse(rows[id].fetchedAt) < Date.parse(previous[id].fetchedAt))) {
+        rows[id] = {...previous[id],retrievalError:'來源回傳較舊資料，保留較新記錄與原始時間'};
+      }
+    }
+    if (rows[id]?.state !== 'ok' && previous[id]?.state === 'ok') rows[id] = {...previous[id], retrievalError:message};
+    else if (!rows[id]) rows[id] = {id,state:'unavailable',message};
+  }
+  return rows;
+}
 async function refreshLive() {
   if (refreshPending) return refreshPending;
-  $('refresh').disabled = true;
+  const generation = feedGeneration, url = sheetUrl;
   refreshPending = (async () => {
     try {
-      const response = await fetch(new URL('./data/foliage.json', import.meta.url), {cache:'no-store',signal:AbortSignal.timeout(15000)});
+      const response = await fetch(url || new URL('./data/foliage.json', import.meta.url), {cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(15000)});
       if (!response.ok) throw Error('楓況服務回應失敗');
-      const feed = validateLiveFeed(await response.json(), spots.map(s=>s.id));
-      liveRows = Object.fromEntries(feed.results.map(row=>[row.id,row]));
+      let feed = validateLiveFeed(await response.json(), spots.map(s=>s.id));
+      // Static hosts lack the server marker: read the shared bridge directly,
+      // retaining an existing deployed snapshot if the bridge cannot be read.
+      if (!url && !response.headers.get('X-Kyoto-Foliage-Service') && defaultSheetFeedUrl) {
+        try {
+          const bridge = await fetch(defaultSheetFeedUrl, {cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(15000)});
+          if (!bridge.ok) throw Error('共用來源讀取失敗');
+          feed = validateLiveFeed(await bridge.json(), spots.map(s=>s.id));
+        } catch (error) {
+          if (!feed.results.some(row=>row.state==='ok')) throw error;
+          feed.results = feed.results.map(row=>row.state==='ok' ? {...row,retrievalError:'共用來源暫時無法讀取，顯示網站部署的快照；請核對觀測時間'} : row);
+        }
+      }
+      if (generation !== feedGeneration) return;
+      liveRows = keepPrevious(liveRows, feed.results, '本次未取得可用觀測，保留上次記錄與原始時間');
       feedState = feed.results.some(row=>row.state==='ok') ? 'available' : 'unavailable';
       checkedAt = new Date();
-    } catch { feedState = 'error'; }
-    finally { $('refresh').disabled = false; render(); }
+      store('kyoto-live-cache', {url:url || defaultSheetFeedUrl,feed:{version:1,results:Object.values(liveRows)}});
+    } catch {
+      if (generation !== feedGeneration) return;
+      feedState = 'error';
+      liveRows = keepPrevious(liveRows, [], '同步失敗，保留上次記錄與時間；請核對來源是否仍有效');
+    } finally { render(); }
   })().finally(()=>{refreshPending=null;});
   return refreshPending;
+}
+async function refreshWeather() {
+  if (!weatherEnabled) { weatherState = 'off'; return; }
+  if (weatherPending) return weatherPending;
+  weatherPending = (async () => {
+    try {
+      const response = await fetch(new URL('./data/weather.json', import.meta.url), {cache:'no-store',signal:AbortSignal.timeout(15000)});
+      // GitHub Pages has no server endpoint; use the public API directly in that case.
+      let feed;
+      if (response.status === 404) feed = await fetchWeatherFeed();
+      else {
+        if (!response.ok) throw Error('天氣服務讀取失敗');
+        feed = validateWeatherFeed(await response.json());
+      }
+      weatherRows = keepPrevious(weatherRows, feed.results, '天氣更新失敗，保留上次資料與時間');
+      weatherState = feed.results.some(row=>row.state==='ok') ? 'available' : 'unavailable';
+      store('kyoto-weather-cache', {version:1,results:Object.values(weatherRows)});
+    } catch {
+      weatherState = 'error';
+      weatherRows = keepPrevious(weatherRows, [], '天氣更新失敗，保留上次資料與時間');
+    } finally { render(); }
+  })().finally(()=>{weatherPending=null;});
+  return weatherPending;
+}
+async function refreshAll() {
+  $('refresh').disabled = true;
+  try { await Promise.allSettled([refreshLive(), refreshWeather()]); }
+  finally { $('refresh').disabled = false; }
+}
+const japanTime = value => new Date(value).toLocaleString('zh-TW',{timeZone:'Asia/Tokyo',hour12:false});
+function weatherHtml(s) {
+  if (!weatherEnabled) return '';
+  const row = weatherRows[s.id];
+  if (row?.state !== 'ok') return `<section class="weather-panel" aria-label="${s.name}氣象參考"><strong>☁ 景點附近氣象</strong><p>${esc(weatherState==='loading'?'正在讀取天氣…':row?.message || '暫時無法讀取天氣，稍後可重試。')}</p><small>氣象與實際楓況分開；無資料時不推算楓色。</small></section>`;
+  const stale = Date.now()-Date.parse(row.current.modelAt)>3*3600000 || Date.now()-Date.parse(row.fetchedAt)>3600000;
+  return `<section class="weather-panel" aria-label="${s.name}氣象參考"><div class="weather-heading"><strong>☁ ${row.current.temperatureC.toFixed(1)}°C · ${esc(weatherCodeLabel(row.current.weatherCode))}</strong><span>${stale?'資料已過期':'氣象模式估計'}</span></div><small>地點附近的模式網格，並非景點現場測站；不代表紅葉狀態。</small><details><summary>查看資料涵蓋的 7 日最低溫</summary><div class="weather-days">${row.dailyMin.map(d=>`<div><time datetime="${d.date}">${d.date.slice(5).replace('-','/')}</time><strong>${d.temperatureC.toFixed(1)}°</strong></div>`).join('')}</div><small>不含讀取當日；歷史模式資料，不是樹葉觀測。</small></details><small>模式時間：${esc(japanTime(row.current.modelAt))} 日本時間<br>讀取時間：${esc(japanTime(row.fetchedAt))} 日本時間 · ${link(row.sourceUrl,'Open-Meteo（CC BY 4.0）')}</small>${row.retrievalError?`<p class="weather-error">⚠ ${esc(row.retrievalError)}</p>`:''}</section>`;
 }
 function score(s) { const o = obs(s); return o && !o.stale ? ({見頃:3,轉紅:2}[o.status] || 0) : 0; }
 const map = s => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.map);
@@ -87,25 +169,27 @@ function render() {
   $('day-title').textContent = ['東南京都・古寺楓色','東山散步・庭園之秋','奈良一日・鹿與秋葉'][day];
   const seen = items.filter(s => { const o=obs(s); return o && !o.stale && o.status === '見頃'; });
   $('bloom-count').textContent = `${seen.length} / ${items.length} 站見頃`;
-  $('bloom-note').textContent = `手動 ${seen.filter(s=>obs(s).manual).length} · 自動 ${seen.filter(s=>obs(s).automatic).length} · 匯入 ${seen.filter(s=>!obs(s).manual&&!obs(s).automatic).length}（24 小時內）`;
+  $('bloom-note').textContent = `手動 ${seen.filter(s=>obs(s).manual).length} · 同步 ${seen.filter(s=>obs(s).automatic).length} · 匯入 ${seen.filter(s=>!obs(s).manual&&!obs(s).automatic).length}（24 小時內）`;
   // Maps transit does not reliably support waypoints; offer all stops in walking mode and transit per leg.
   const route = new URL(directions(items[0],items.at(-1))); route.searchParams.set('travelmode','walking'); route.searchParams.set('waypoints',items.slice(1,-1).map(s=>s.map).join('|'));
   $('whole-route').href = route; $('bottom-route').href = route;
   $('cards').innerHTML = items.map((s,i) => {
     const o=obs(s), key=`${day}-${i}`, booking=bookings[s.id];
-    const status = o ? `${labels[o.status] || o.status} · ${o.stale?'已過期':o.manual?'手動':o.automatic?'自動來源':'匯入'}` : '◌ 紅葉待確認';
+    const status = o ? `${labels[o.status] || o.status} · ${o.stale?'已過期':o.manual?'手動':o.automatic?'同步來源':'匯入'}` : '◌ 紅葉待確認';
     return `<article class="card" data-spot="${s.id}"><div class="card-top"><div><div class="index">STOP 0${i+1} / ${s.area}</div><h3>${s.name}</h3><div class="english">${s.en}</div></div><span class="status">${esc(status)}</span></div>
-    <div class="status-control"><label>手動標記楓況 <select data-status="${s.id}" aria-label="${s.name}手動楓況"><option value="">使用來源資料／待確認</option>${statuses.map(v=>`<option value="${v}" ${manual[s.id]?.status===v?'selected':''}>${labels[v]}</option>`).join('')}</select></label><small>手動標記優先顯示；選「使用來源資料」可恢復自動／匯入記錄。</small></div>
+    ${weatherHtml(s)}<div class="status-control"><label>手動標記楓況 <select data-status="${s.id}" aria-label="${s.name}手動楓況"><option value="">使用來源資料／待確認</option>${statuses.map(v=>`<option value="${v}" ${manual[s.id]?.status===v?'selected':''}>${labels[v]}</option>`).join('')}</select></label><small>手動標記優先顯示；選「使用來源資料」可恢復自動／匯入記錄。</small></div>
     <p>${s.note}</p><div class="meta">☀ 日間｜${s.hours}<br>🌙 夜間｜${['kiyomizu','eikando','shogunzuka'].includes(s.id)?'可能有季節限定夜間拜觀；2026 場次、時間及票務待官網確認':'未確認夜間開放，請勿以日間票推定可夜間入場'}<br>▤ 預約與票務｜${link(s.url,'查閱官方公告')}<br>◉ 人潮｜尚無自動即時資料${o?`<br>楓況記錄｜${esc(new Date(o.observedAt).toLocaleString('zh-TW'))} · ${o.manual?'個人手動標記':link(o.sourceUrl,origin(o))}${o.automatic?`<br>來源原文｜${esc(o.rawStatus)}<br>讀取時間｜${esc(new Date(o.fetchedAt).toLocaleString('zh-TW'))}${o.retrievalError?`<br>⚠ ${esc(o.retrievalError)}`:''}`:''}`:''}</div>
-    ${liveRows[s.id]?.state!=='ok'?`<div class="feed-note">自動楓況：${esc(liveRows[s.id]?.message || (feedState==='error'?'服務讀取失敗，請稍後重試':'尚未取得來源資料'))}</div>`:''}<div class="booking"><span>預約序號：${booking?'已儲存（點編輯查看）':'尚未填寫'}</span><button data-booking="${s.id}">${booking?'編輯':'新增'}序號</button></div>
+    ${liveRows[s.id]?.state!=='ok'?`<div class="feed-note">同步楓況：${esc(liveRows[s.id]?.state==='not_configured'?'尚無可驗證的楓況觀測':liveRows[s.id]?.message || (feedState==='error'?'服務讀取失敗，請稍後重試':'尚未取得來源資料'))} · ${link(foliageReferenceUrls[s.id] || s.url,'查看來源參考頁')}</div>`:''}<div class="booking"><span>預約序號：${booking?'已儲存（點編輯查看）':'尚未填寫'}</span><button data-booking="${s.id}">${booking?'編輯':'新增'}序號</button></div>
     <div class="actions">${link(map(s),'Google Maps')}${link(map(s),'Google 熱門程度')}${link(s.url,'景點官網')}</div>
-    <details class="sources"><summary>查楓況照片與現場人潮</summary><div class="actions">${link('https://weathernews.jp/koyo/','Weathernews 楓況入口')}${s.area.startsWith('京都')?link('https://souda-kyoto.jp/','JR 東海京都入口'):''}${link(search(s.map+' 紅葉 今日 写真'),'搜尋最新楓況照片')}${link('https://www.youtube.com/results?search_query='+encodeURIComponent(s.map+' ライブカメラ'),'YouTube 直播搜尋')}${s.area.startsWith('京都')?link('https://ja.kyoto.travel/comfort/','京都官方快適度資訊'):''}</div><small>入口與搜尋結果不保證涵蓋此景點。請核對拍攝地點、日期及直播標記；Maps 熱門程度與官方資訊可能為預測或歷史資料。</small></details>
+    <details class="sources"><summary>查楓況照片與現場人潮</summary><div class="actions">${link('https://weathernews.jp/koyo/','Weathernews 楓況入口')}${s.area.startsWith('京都')?link(foliageReferenceUrls[s.id] || 'https://souda-kyoto.jp/',foliageReferenceUrls[s.id]?'JR 東海景點資料':'JR 東海京都入口'):''}${link(search(s.map+' 紅葉 今日 写真'),'搜尋最新楓況照片')}${link('https://www.youtube.com/results?search_query='+encodeURIComponent(s.map+' ライブカメラ'),'YouTube 直播搜尋')}${s.area.startsWith('京都')?link('https://ja.kyoto.travel/comfort/','京都官方快適度資訊'):''}</div><small>入口與搜尋結果不保證涵蓋此景點。請核對拍攝地點、日期及直播標記；Maps 熱門程度與官方資訊可能為預測或歷史資料。</small></details>
     ${alternativeHtml(s)}${originals[key]?`<button class="restore" data-restore="${i}">↩ 還原原景點：${byId(originals[key]).name}</button>`:''}</article>
     ${i<items.length-1?`<div class="transfer">↓ ${s.name} → ${items[i+1].name}<br>${link(directions(s,items[i+1]),'Google 路線導航 · 大眾運輸')}<small>車次、轉乘與時間由 Google Maps 即時計算</small></div>`:''}`;
   }).join('');
   $('suggestions').innerHTML = '<p>備案現在直接顯示於需要應變的景點下方。替換後可一鍵還原，並同步更新前後站導航。</p>';
-  $('freshness').textContent = `自動 ${Object.values(liveRows).filter(r=>r.state==='ok').length} · 手動 ${Object.keys(manual).length} · 匯入 ${Object.keys(observations).length}`;
-  $('feed-status').textContent = feedState === 'loading' ? '正在檢查自動資料…' : feedState === 'error' ? '自動資料讀取失敗；保留既有記錄，不更新觀測時間。' : feedState === 'available' ? '已讀取來源快照；各景點顯示原始觀測時間，超過 24 小時標記過期。' : '自動讀取尚未就緒：真實來源仍待驗證，目前沒有自動楓況。';
+  $('freshness').textContent = `同步 ${Object.values(liveRows).filter(r=>r.state==='ok').length} · 手動 ${Object.keys(manual).length} · 匯入 ${Object.keys(observations).length}`;
+  $('feed-status').textContent = feedState === 'loading' ? '正在檢查來源資料…' : feedState === 'error' ? '楓況同步失敗；保留既有記錄，不更新觀測時間。請檢查來源部署權限與網路。' : feedState === 'available' ? '已讀取來源快照；保留記錄方式與原始觀測時間，超過 24 小時標記過期。' : '資料讀取完成，目前尚無有效楓況觀測；參考網址與實際觀測分開顯示。';
+  $('weather-status').textContent = !weatherEnabled ? '天氣自動更新已關閉。' : weatherState === 'loading' ? '正在讀取景點附近天氣…' : weatherState === 'available' ? '天氣每 15 分鐘讀取；為模式資料，不據此判定楓況。' : '天氣更新未成功；舊資料會保留原始時間。';
+  $('source-description').textContent = sheetUrl ? '目前使用你設定的 Google Sheets 橋接來源；開啟與每 15 分鐘自動讀取。' : defaultSheetFeedUrl ? '目前使用共用試算表來源；開啟與每 15 分鐘自動讀取。未填有效觀測的景點維持待確認。' : '目前使用網站內建的楓況資料；尚未設定試算表橋接來源。';
   $('feed-checked').textContent = checkedAt ? `服務檢查：${checkedAt.toLocaleString('zh-TW')}（非觀測時間）` : '';
 
 }
@@ -122,10 +206,27 @@ $('booking-cancel').onclick=()=>$('booking-dialog').close();
 $('date').onchange=()=>{try{localStorage.setItem('kyoto-date',$('date').value);}catch{}render();};
 $('import').onclick=()=>$('file').click();
 $('file').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>1000000)throw Error('檔案請小於 1 MB');const rows=JSON.parse(await file.text());const validated=validate(rows);observations=validated;store('kyoto-observations',rows);render();notify('已載入；如有手動標記，請選「使用來源資料」查看。');}catch(err){notify('匯入失敗：'+err.message);}finally{e.target.value='';}};
-$('refresh').onclick=async()=>{await refreshLive();notify(feedState==='available'?'已重新讀取來源資料；請確認每筆觀測時間。':'自動來源尚無可用資料；未更改或推測任何楓況。');};
+$('source-form').onsubmit = async e => {
+  e.preventDefault();
+  const value = $('sheet-url').value.trim();
+  if (value && !validSheetFeedUrl(value)) { $('source-feedback').textContent = '請貼上 https://script.google.com/macros/s/部署ID/exec 網址，不可含帳密或查詢參數。'; return; }
+  const pending = refreshPending;
+  feedGeneration++;
+  sheetUrl = value;
+  store('kyoto-sheet-url', sheetUrl);
+  liveRows = {}; checkedAt = null; feedState = 'loading';
+  store('kyoto-live-cache', {url:sheetUrl || defaultSheetFeedUrl,feed:{version:1,results:[]}});
+  $('source-feedback').textContent = value ? '已儲存在此瀏覽器，正在測試讀取…' : '已恢復網站內建楓況來源。';
+  render();
+  if (pending) await pending;
+  await refreshLive();
+  $('source-feedback').textContent = feedState === 'error' ? '設定已儲存，但讀取失敗。請確認部署可公開讀取，並查看串接說明。' : feedState === 'available' ? '設定已儲存，已取得通過驗證的來源記錄。' : '設定已儲存，目前沒有可用觀測；不會填入推測楓況。';
+};
+$('weather-enabled').onchange = async () => { weatherEnabled = $('weather-enabled').checked;store('kyoto-weather-enabled',weatherEnabled);render();if(weatherEnabled) await refreshWeather(); };
+$('refresh').onclick=async()=>{await refreshAll();notify('已完成來源與天氣檢查；請查看各筆資料時間與更新狀態。');};
 $('sample').onclick=()=>{const example=[{id:'tofukuji',status:'未知',observedAt:new Date().toISOString(),sourceUrl:'https://tofukuji.jp/'}];const u=URL.createObjectURL(new Blob([JSON.stringify(example,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download='observations-template.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);};
 setInterval(()=>{if(!$('booking-dialog').open&&!$('cards').contains(document.activeElement))render();},60000);
 render();
 
-refreshLive();
-setInterval(refreshLive,15*60*1000);
+refreshAll();
+setInterval(refreshAll,15*60*1000);

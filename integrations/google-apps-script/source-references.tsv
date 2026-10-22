@@ -1,0 +1,14 @@
+id	景點	sourceUrl	用途	查核狀態
+tofukuji	東福寺	https://souda-kyoto.jp/guide/spot/tofukuji.html	來源參考連結，非現況觀測	HTTP 200，景點標題已核對
+sennyuji	泉涌寺	https://souda-kyoto.jp/guide/spot/sennyuji.html	來源參考連結，非現況觀測	HTTP 200，景點標題已核對
+kiyomizu	清水寺	https://souda-kyoto.jp/guide/spot/kiyomizudera.html	來源參考連結，非現況觀測	HTTP 200，景點標題已核對
+eikando	永觀堂	https://souda-kyoto.jp/guide/spot/eikando.html	來源參考連結，非現況觀測	HTTP 200，景點標題已核對
+nanzenji	南禪寺	https://souda-kyoto.jp/guide/spot/nanzenji.html	來源參考連結，非現況觀測	HTTP 200，景點標題已核對
+bishamondo	毘沙門堂	https://souda-kyoto.jp/guide/spot/bishamondo.html	來源參考連結，非現況觀測	HTTP 200，景點標題已核對
+nara	奈良公園	https://www3.pref.nara.jp/park/	來源參考連結，非現況觀測	既有官方入口，尚未連線核對
+kasuga	春日大社	https://www.kasugataisha.or.jp/	來源參考連結，非現況觀測	HTTP 200，官方入口已核對；非即時楓況
+isuien	依水園	https://isuien.or.jp/	來源參考連結，非現況觀測	HTTP 200，官方入口已核對；非即時楓況
+yoshikien	吉城園	https://www.pref.nara.jp/	來源參考連結，非現況觀測	既有官方入口，尚未連線核對
+shogunzuka	將軍塚青龍殿	https://souda-kyoto.jp/guide/spot/shogunzukaseiryuden.html	來源參考連結，非現況觀測	HTTP 200，景點標題已核對
+gioji	祇王寺	https://souda-kyoto.jp/guide/spot/giouji.html	來源參考連結，非現況觀測	HTTP 200，景點標題已核對
+jojakkoji	常寂光寺	https://souda-kyoto.jp/guide/spot/jojakkoji.html	來源參考連結，非現況觀測	HTTP 200，景點標題已核對

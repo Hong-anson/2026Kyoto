@@ -1,11 +1,13 @@
 import {writeFile,rename,mkdir} from 'node:fs/promises';
 import {createFoliageService,adapters} from '../lib/foliage-service.js';
+import {configuredProviders} from '../lib/foliage-provider.js';
+const providers = [...adapters,...configuredProviders()];
 // An unsuccessful sync must not overwrite a previously deployed snapshot.
-if (!adapters.length) {
-  console.error('尚未驗證任何真實楓況來源。未更新快照；請先開放來源網路並完成解析器驗證。');
+if (!providers.length) {
+  console.error('尚未配置楓況來源。未更新快照；請設定 FOLIAGE_FEED_URL，或完成真實來源解析器驗證。');
   process.exitCode = 2;
 } else {
-  const feed = await createFoliageService().get();
+  const feed = await createFoliageService({providers}).get();
   if(!feed.results.some(row=>row.state==='ok')) {
     console.error('來源沒有可驗證觀測，保留既有快照。');
     process.exitCode = 1;

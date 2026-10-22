@@ -12,7 +12,7 @@ test('reject invented dates, disallowed domains, duplicate ids and unknown statu
   assert.throws(()=>validateLiveFeed({version:1,results:[row,row]},['tofukuji'],at));
 });
 test('absence of verified adapters returns unknown rather than fake current observations',async()=>{
-  const result=await createFoliageService({clock:()=>at}).get();
+  const result=await createFoliageService({providers:[],clock:()=>at}).get();
   assert.equal(result.results.length,13);
   assert.ok(result.results.every(r=>r.state==='not_configured'&&!r.observedAt&&!r.status));
 });
@@ -43,4 +43,21 @@ test('missing upstream spot preserves prior record rather than marking it fresh'
   const service=createFoliageService({providers:[{ids:['tofukuji'],read:async()=>missing?[]:[{...row}]}],clock:()=>now,ttl:1});
   await service.get();now+=2;missing=true;
   const result=await service.get();assert.equal(result.results[0].observedAt,row.observedAt);assert.match(result.results[0].retrievalError,/缺少景點/);
+});
+
+test('synchronized records preserve provenance and require timezone-aware real calendar dates',()=>{
+  const manual=validateLiveFeed({version:1,results:[{...row,recordingMethod:'manual'}]},['tofukuji'],at).results[0];
+  assert.equal(manual.recordingMethod,'manual');assert.equal(manual.observedAt,row.observedAt);
+  assert.equal(validateLiveFeed({version:1,results:[row]},['tofukuji'],at).results[0].recordingMethod,'unspecified');
+  for(const patch of [{recordingMethod:'guessed'},{observedAt:'2026-10-22'},{observedAt:'2026-10-22T07:00:00'},{observedAt:'2026-02-30T07:00:00Z'},{fetchedAt:'2026-10-22T24:00:00Z'}]) {
+    assert.throws(()=>validateLiveFeed({version:1,results:[{...row,...patch}]},['tofukuji'],at));
+  }
+});
+
+
+test('older source observations cannot replace a newer successful record',async()=>{
+  let time=at,older=false;
+  const service=createFoliageService({clock:()=>time,ttl:1,providers:[{ids:['tofukuji'],read:async()=>[{...row,...(older?{status:'青葉',observedAt:'2026-10-21T07:00:00.000Z'}:{})}]}]});
+  await service.get();older=true;time+=2;
+  const kept=(await service.get()).results[0];assert.equal(kept.status,'見頃');assert.equal(kept.observedAt,row.observedAt);assert.equal(kept.fetchedAt,row.fetchedAt);assert.match(kept.retrievalError,/較舊/);
 });
