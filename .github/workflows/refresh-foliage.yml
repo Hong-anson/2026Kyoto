@@ -1,0 +1,84 @@
+name: Refresh foliage and publish site
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pages: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the latest source and retained observations
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Validate the application and source parsers
+        run: npm test
+      - name: Retrieve verified source observations
+        run: node scripts/sync-foliage.js
+      - name: Retain the observation snapshot for the next run
+        run: |
+          git add -- public/data/foliage.json
+          if git diff --cached --quiet -- public/data/foliage.json; then
+            echo "Observation snapshot is unchanged."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Refresh source foliage observations'
+          git push origin HEAD:main
+      - name: Read the existing GitHub Pages configuration
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - name: Package only the public website
+        id: package
+        run: |
+          site_dir=$(mktemp -d "$RUNNER_TEMP/kyoto-pages.XXXXXX")
+          cp -- index.html .nojekyll "$site_dir/"
+          cp -R -- public "$site_dir/public"
+          mkdir -p "$site_dir/integrations"
+          cp -R -- integrations/google-apps-script "$site_dir/integrations/google-apps-script"
+          echo "path=$site_dir" >> "$GITHUB_OUTPUT"
+      - name: Upload the website artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: ${{ steps.package.outputs.path }}
+          retention-days: 1
+
+  deploy:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish the refreshed website
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

@@ -1,115 +1,63 @@
-# 2026Kyoto
+# 楓旅 · 2026 京都奈良賞楓手帳
 
-# 楓旅 · 京都奈良賞楓行程初版
+正式網站：https://hong-anson.github.io/2026Kyoto/
 
-Node.js 22+，不需要第三方套件、API 金鑰或安裝依賴。
+日本網站的有日期楓況 → 伺服器擷取與驗證 → JSON 快照 → GitHub Pages。瀏覽器直接讀取網站快照，不必透過試算表代抓日本網站。
+
+## 自動楓況
+
+- Weathernews：核對景點名稱、專屬編號、來源狀態及觀測日期，涵蓋東福寺、泉涌寺、清水寺、永觀堂、南禪寺、毘沙門堂、奈良公園、將軍塚、祇王寺、常寂光寺。
+- 春日大社：自動從官方植物園公告列表尋找最新有日期文章；觀測範圍僅限**萬葉植物園，非春日大社全境**。
+- 依水園、吉城園：目前沒有驗證成功的有日期紅葉資料，顯示查詢時間及尚無可用觀測的原因，不套用奈良公園的資料。
+- 只保存簡短狀態事實、日期、範圍與來源連結，不複製照片、完整報導或網站版面。版型、欄位、日期或身分無法驗證時停止採用該筆資料。
+
+2026-10-24 實際讀取：Weathernews 十個專屬頁均取得來源記錄；奈良公園為 10/23「開始變色（全體三成）」、泉涌寺為 10/23「尚未見頃」、常寂光寺為 10/22「尚未見頃」、將軍塚為 10/21「尚未見頃」，另外六處仍停留在 9/3。萬葉植物園為 10/19「開始變色」。這些是來源明示日期的記錄，**不是全部景點在今天重新觀測的結果**。網站內容會隨之後擷取更新，以上僅為本次驗證證據。
+
+Weathernews「まだ」只譯為「尚未見頃」，不推定為青葉。來源沒有時分秒時保留 `observedDate` 與 `observationPrecision: day`，不捏造 `observedAt`。Weathernews 年份取自已核對的同頁季節標題，月日取自觀測欄位；預測見頃日期不作為觀測。日期資料採日本當日零時作為保守的時效判斷界線，僅供排序／判斷，畫面不顯示為實際觀測時間；較舊日期會標示不能當作今日現況。
+
+每小時第 17 分鐘由 GitHub Actions 擷取、保留快照並發布。排程可能延遲；擷取頻率不同於原始網站的觀測頻率。前端開啟時、每 15 分鐘及按「讀取最新來源」時重新讀取部署資料。手動更新按鈕不會強制日本網站產生新觀測。
+
+來源暫時失敗時，保留上次有效記錄及原始時間並顯示警告。新的較舊觀測不能覆蓋已保存的較新記錄。若沒有任何新或舊有效觀測，擷取會失敗並保留原檔案。排程、首次發布與權限細節見 [自動擷取與發布說明](integrations/automatic-foliage.md)。
+
+## 本機開發
+
+Node.js 22+，不需要第三方執行套件、API 金鑰或建置步驟。
 
 ```sh
-cd /workspace/2026Kyoto
+npm test
 npm start
 ```
 
-預設埠 3000，可使用 PORT 調整。日期與三日行程為可調整的範例，並非已確認旅行日期。行程選擇與觀測資料儲存在目前瀏覽器。
+預設埠 3000，可用 `PORT` 調整。雲端 Node.js 24 的外連需要已注入的 HTTPS 代理時，使用 `NODE_USE_ENV_PROXY=1 npm start`；不要停用 TLS 驗證。
 
-## 已實作
+```sh
+NODE_USE_ENV_PROXY=1 npm run sync:foliage
+```
 
-- 京都兩日、奈良一日的範例行程，手機版與桌面版。
-- 景點注意事項、開放時間說明、官方票務與預約連結。
-- Google Maps 景點搜尋、站間大眾運輸，以及包含中途站的整日步行總覽。多站大眾運輸未獲 Maps 可靠支援，請逐站導航。
-- 紅葉觀測匯入、時間與來源驗證，超過 24 小時自動視為過期。
-- 青葉／微黃／落葉／未知／過期時的地區備案，優先推薦新鮮轉紅或見頃觀測；使用者一鍵替換並更新路線。
+成功擷取會更新追蹤中的 `public/data/foliage.json`。後端 `/data/foliage.json` 預設直接讀取日本來源，使用一小時快取並合併併發請求；啟動時載入已保存快照以供來源失敗時保留。Weathernews 單次並行上限為兩個頁面，所有來源均有逾時、回應大小及重新導向限制。
 
-## 尚待串接的真實資料
+測試使用明確的合成 fixture，涵蓋來源身分、日期精度、狀態、預測排除、來源失敗／回退、跨次快照保存、橋接與氣象。合成資料測試與上述真實來源連線驗證為不同證據。Chromium 另驗證靜態快照合併、空白試算表不清除自動資料、範圍標示、手動覆寫與手機寬度。
 
-專案已預設接上你部署的公開 Google Sheets 橋接器，實際取得 `version:1`、13 筆 `not_configured`；**目前仍沒有真實景點觀測，也沒有即時人潮 API**。App 可自動讀取試算表與 Open-Meteo 氣象；更新按鈕會重新讀取來源並檢查資料時效，不會把未知楓況設成青葉。人潮連到 Maps，由使用者確認是否有熱門程度資料。未查證當年度營業時間、票價及預約規則，故提供官方入口與保守說明。
+## 試算表補充資料
 
-正式串接需要具合法使用權的資料來源、更新頻率、涵蓋景點、授權方式與伺服器排程；目前可從「下載觀測格式」取得 JSON 格式後匯入：
+你已部署的唯讀 Apps Script 網址存於 [public/source-config.js](public/source-config.js)，不含密鑰。預設試算表可補充觀測；空白列或未配置列不會覆蓋自動擷取資料。跨來源均以較新觀測優先。現有部署仍可繼續使用，無須重新貼程式。
+
+在網頁「自動同步設定」填入個人的公開 Apps Script `/exec` 網址，可覆寫目前瀏覽器的預設楓況來源；留空並儲存恢復內建自動來源。伺服器 `FOLIAGE_FEED_URL` 可替換補充橋接，明確設空字串只停用橋接，仍保留日本來源自動擷取。
+
+試算表不會自行生成真實楓況，資料必須有可靠來源及觀測時間，人工整理需標記 `recordingMethod: manual`。設定說明與最多 100 行的橋接程式見 [Apps Script 說明](integrations/google-apps-script/README.md)及 [Code.gs](integrations/google-apps-script/Code.gs)。舊橋接格式使用含時區 `observedAt`；新的日本來源日期精度直接由網站快照供應，不經舊橋接改寫。
+
+## 天氣與行程
+
+Open-Meteo 供應 13 站附近的目前氣溫、天氣代碼與過去七個完整日本日期的最低溫，屬氣象模式網格資料，非景點現場測站。氣溫不推導或證明楓況。天氣每 15 分鐘讀取；GitHub Pages 端點 404 時直接呼叫公開 API，失敗保留原始時間並標示過期。保留 Open-Meteo（CC BY 4.0）出處，免費服務用途與用量依其[條款](https://open-meteo.com/en/terms)及[方案](https://open-meteo.com/en/pricing)。
+
+京都兩日、奈良一日為可調整的範例行程；尚未查證當年度營業時間、票價、夜間拜觀與預約規則，請出發前至官網確認。Google Maps 提供逐站大眾運輸導航及整日步行總覽。人潮尚無自動即時 API，使用 Maps 熱門程度或官方入口自行核對。照片與直播搜尋連結不代表已驗證的即時景點鏡頭。
+
+手動楓況優先於來源／匯入資料，解除後恢復資料比較。備案替換會更新路線並可還原。行程、手動狀態、來源設定及預約序號只儲存在目前瀏覽器；預約序號未加密，不跨裝置同步，也不代表預約成功。觀測 JSON 手動匯入格式：
 
 ```json
 [{"id":"tofukuji","status":"未知","observedAt":"2026-10-22T08:00:00Z","sourceUrl":"https://tofukuji.jp/"}]
 ```
 
-狀態支援：青葉、轉黃、轉紅、見頃、落葉、未知。來源必須 HTTPS，時間不可超過現在五分鐘。匯入會取代目前觀測集合。景點 ID：tofukuji、sennyuji、kiyomizu、eikando、nanzenji、bishamondo、nara、kasuga、isuien、yoshikien、shogunzuka、gioji、jojakkoji。
+景點 ID：tofukuji、sennyuji、kiyomizu、eikando、nanzenji、bishamondo、nara、kasuga、isuien、yoshikien、shogunzuka、gioji、jojakkoji。支援青葉、尚未見頃、開始變色、轉黃、轉紅、見頃、開始落葉、落葉及未知。
 
-Google Fonts 為選用，無網路時使用系統字型。
-
-## GitHub Pages
-
-在 GitHub Settings → Pages 選擇 Deploy from a branch，Branch 選 main，資料夾選 / (root) 並儲存。網站入口會轉往 public/index.html，不需要 Node.js 伺服器。
-
-## 互動功能更新
-
-- 每張景點卡提供手動楓況選擇，與匯入來源分開顯示。手動狀態優先，選「使用匯入資料／待確認」可解除覆寫。初始狀態不預設虛構楓況。
-- 當日見頃統計只計算 24 小時內記錄，並區分手動與匯入筆數。
-- 備案直接展開在卡片下方；新增將軍塚青龍殿、祇王寺與常寂光寺作為候選。排序先考慮新鮮轉紅／見頃記錄，再考慮區域與狀態偏好。這些偏好不是景點已見頃的證據，跨區移動需重新確認交通。
-- 一鍵替換會更新前後站連結；每個行程位置保留最初景點，可重新整理後還原。
-- 每站可編輯預約序號，僅以未加密 localStorage 儲存在此瀏覽器、不跨裝置同步。卡片不直接公開序號；清空後儲存可刪除。記錄不代表預約成功。
-- 日間與夜間資訊分開，2026 年度尚未查證的時間與規則維持「待官方確認」。
-- 提供 Weathernews、JR 東海京都入口、景點照片搜尋、YouTube 直播搜尋與京都官方快適度資訊連結。不是已驗證的景點專屬鏡頭，也不保證查詢結果為即時資料；請確認拍攝地點、日期、直播狀態及官方預測／實測標示。奈良不顯示京都專屬入口。
-
-驗證：已以 Chromium 實際操作手動狀態與統計、備案替換與還原、前後站連結、跨重新整理保存、序號編輯刪除、過期／新鮮觀測匯入、奈良頁籤、手機寬度與 JavaScript 錯誤檢查。
-
-## 已整理的來源參考頁
-
-已核對 9 個京都景點的 JR 東海專頁，App 的「查看來源參考頁」與「JR 東海景點資料」會直接連到各景點。這些頁面是參考連結，不能當作有效觀測；實際紅葉清單 `https://souda-kyoto.jp/guide/season/koyo/modal.json` 目前對應景點均為「選択なし」，照片標示 2025 年，也未提供本季完整觀測時間。
-
-13 站網址清單見 [來源參考表](integrations/google-apps-script/source-references.tsv)。春日大社與依水園官方入口已回傳 HTTP 200；奈良公園仍遭網路代理阻擋，奈良縣／吉城園入口的上游 TLS 憑證驗證失敗。這些入口均不宣稱是可自動解析的當季楓況頁。你提供的 Apps Script 只有唯讀 API，本工作階段沒有 Google Sheets 寫入工具；可在自己的 Apps Script 執行一次 [fillSourceUrls](integrations/google-apps-script/fill-source-urls.gs)，只補空白來源網址，保留既有狀態、時間與已填來源。這項手動執行不需要更新唯讀網頁部署。
-
-## 自動天氣與楓況同步
-
-氣象與楓況分開更新：氣溫不會推導、覆寫或證明景點已變色。沒有可驗證的觀測時顯示「待確認」。目前真實日本網站解析器數量仍為 **0**。你部署的 Google Sheets 橋接器已確認可匿名讀取，並設為專案預設來源；目前 13 筆景點皆為 `not_configured`，沒有可驗證楓況。橋接接通與合成資料測試通過，不代表真實楓況來源已接通；天氣 API 的實際驗證另列於下方。
-
-### 天氣
-
-- `public/weather-feed.js` 記錄 13 個既有景點的區域座標，以一次批次請求讀取 Open-Meteo 的目前氣溫、天氣代碼，以及過去 **7 個完整日本日期**的每日最低溫，不含讀取當日。
-- 畫面顯示模式時間、讀取時間與 Open-Meteo 出處。這是景點附近的**氣象模式網格資料**，不是景點現場測站實測，也不是樹葉觀測；歷史低溫同樣是模式資料。
-- Node.js 的 `GET /data/weather.json` 使用 `lib/weather-service.js`，15 分鐘記憶體快取並合併併發請求。頁面開啟時、每 15 分鐘及按更新時讀取；若服務回傳 404（例如 GitHub Pages），瀏覽器才直接呼叫 Open-Meteo 公開 API。
-- 首次失敗顯示無資料；已有資料時保留原始時間並顯示更新失敗。模式超過 3 小時或讀取超過 1 小時會標記過期。記憶體快取不跨伺服器重啟保留，瀏覽器另以 localStorage 保存最後有效資料。
-- 「自動同步設定」可關閉天氣自動讀取，設定只存於目前瀏覽器。
-
-使用 Open-Meteo 免費端點不需 API 金鑰；免費服務有頻率、用量與非商業用途限制，資料依 **CC BY 4.0** 標示來源。商業部署或增加用量前，請確認最新[服務條款](https://open-meteo.com/en/terms)、[授權與訂閱方案](https://open-meteo.com/en/pricing)及[API 文件](https://open-meteo.com/en/docs)。前端已保留 Open-Meteo 出處。
-
-### Google Sheets 楓況橋接
-
-已部署的公開網址保存在 [public/source-config.js](public/source-config.js)，供 Node.js 與靜態網頁共用；這是公開讀取設定，不含憑證。沒有填入可靠觀測的景點維持 `not_configured`。要改接另一份試算表，一次性設定、欄位與排程說明見 [Google Apps Script 串接說明](integrations/google-apps-script/README.md)，橋接程式為 [Code.gs](integrations/google-apps-script/Code.gs)。
-
-可使用以下任一讀取方式：
-
-- 預設不需再貼網址：Node.js 網站從同源 `/data/foliage.json` 取得資料；GitHub Pages 等靜態網站讀取共用預設橋接。若要個人覆寫，在 App 的「自動同步設定」貼上另一個公開可讀取的 `https://script.google.com/macros/s/部署ID/exec` 網址，再按「儲存並測試連線」。網址不可含帳密、查詢參數或片段；設定與最後有效資料只存在目前瀏覽器。留空並儲存即恢復網站內建來源。
-- Node.js 的 `FOLIAGE_FEED_URL` 可覆寫共用預設網址；未設定時使用 `public/source-config.js`，明確設為空字串則停用後端預設橋接。後端讀取橋接器並提供同源 `GET /data/foliage.json`，避免依賴瀏覽器跨來源讀取。程式只接受指定 Apps Script 路徑及受限的 Google 重新導向，不需要額外秘密。
-
-Google Sheets 不會自行生成真實楓況。人工查證填入時必須標記 `recordingMethod: manual`；只有已驗證且合法使用的上游 JSON 才適合啟用 Apps Script 的每 30 分鐘同步排程。來源未註明記錄方式則維持 `unspecified`，不宣稱自動擷取。這個專案尚未提供可直接抓取日本網站的解析器或現成上游網址，也未建立自動抓取來源的排程。
-
-`public/foliage-feed.js` 驗證景點、原始狀態、含時區的觀測／讀取時間及可信 HTTPS 來源。目前接受 `weathernews.jp`、`souda-kyoto.jp`。後端 `lib/foliage-service.js` 使用 30 分鐘快取；前端每 15 分鐘讀取。這些都是**讀取頻率，不是來源觀測頻率**。失敗保留舊觀測與原始時間，超過 24 小時明示過期。個人手動覆寫優先；解除後，自動與匯入資料取觀測時間較新的記錄。
-
-Apps Script 部署不保證所有瀏覽器環境均可跨來源讀取。若出現 CORS 或部署權限錯誤，改用上述 Node.js 後端，或排程產生並部署靜態快照；不要假設試算表可繞過來源網站的存取限制。
-
-### 執行、驗證與靜態快照
-
-一般 Node.js 22+ 可使用前述 `npm start`。目前雲端環境為 Node.js 24，外連需走已注入的 HTTPS 代理，請啟用此執行階段支援的設定：
-
-```sh
-cd /workspace/2026Kyoto
-NODE_USE_ENV_PROXY=1 npm start
-```
-
-現有橋接網址已設為專案預設；若需覆寫，可於啟動前設定 `FOLIAGE_FEED_URL`。網址為公開設定，請勿放入憑證。`NODE_USE_ENV_PROXY` 依賴 Node.js 版本支援，不能假設所有符合最低版本的 Node.js 都支援。不要停用 TLS 驗證。
-
-```sh
-npm test
-npm run sync:foliage
-```
-
-- `npm test` 使用明確的合成 fixture，涵蓋楓況驗證、橋接、氣象、快取、失敗保留與時間邊界。這些測試驗證程式契約，**不代表任何真實景點楓況或氣象已取得**。
-- `npm run sync:foliage` 使用共用預設橋接或 `FOLIAGE_FEED_URL` 覆寫值，取得有效觀測時才產生 `public/data/foliage.json`。來源失敗或全無有效觀測時 exit 1（目前橋接全為 `not_configured`，因此屬此情況）；明確停用橋接且未配置其他來源時 exit 2。兩者都不覆寫既有快照。
-- GitHub Pages 不執行 Node.js；楓況可讀部署好的快照或可跨來源讀取的橋接器，天氣則在端點 404 時直接讀取公開 API。快照更新與部署排程尚未配置，不能將舊快照描述為即時資料。
-
-### 目前實際連線與尚待完成的部分
-
-本次最初請求曾遭代理回傳 CONNECT 403；更新環境網路草稿並以 `NODE_USE_ENV_PROXY=1` 啟動後，已實際取得 Open-Meteo **13 個景點的有效天氣結果**，`/data/weather.json` 亦回傳 13 筆 `ok`。Weathernews 紅葉入口與 JR 東海網站也已實際回傳 HTTP 200。氣象測試 fixture 與這次真實 API 驗證是不同證據，不可將天氣接通解讀為真實楓況已接通。
-
-環境網路草稿保存了 `api.open-meteo.com`、`weathernews.jp`、`souda-kyoto.jp`、`script.google.com` 與 `script.googleusercontent.com`。目前執行個體的連線已如上述驗證；保存草稿本身不等於發布，後續仍需在環境設定檢視、儲存並發布，以供新任務重用。
-
-實際檢查 [Weathernews 東福寺頁面](https://weathernews.jp/koyo/spot/26111/)時，其狀態為「まだ」、標示「9月3日時点」，沒有完整觀測時間；見頃日期則是預測。這些資訊不能當成今日真實青葉。[利用規約](https://weathernews.jp/ip/kiyaku/)也限制將內容轉用到其他網站，尚未建立本 App 的再利用授權，因此沒有加入預設擷取器。真實自動楓況仍需取得可使用且提供可驗證觀測時間的來源。Google Apps Script 橋接器現已完成公開部署且回傳 13 筆合法的未配置景點資料；實際來源觀測與自動擷取排程仍未完成，不能聲稱已全自動同步真實楓況。
-
-來源查核新增的網路草稿網域：`www3.pref.nara.jp`、`www.kasugataisha.or.jp`、`isuien.or.jp`、`www.pref.nara.jp`、`jr-central.co.jp`。春日大社、依水園與 JR 條款可讀；其餘查核限制如上。環境設定仍需檢視、儲存並發布。
+JR 東海九個景點頁保留為專屬參考連結；其紅葉清單本次仍為「選択なし」且照片日期為 2025，不能冒充本季觀測。完整入口列表見 [來源參考表](integrations/google-apps-script/source-references.tsv)。

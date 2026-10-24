@@ -3,68 +3,173 @@
   "results": [
     {
       "id": "tofukuji",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "ok",
+      "recordingMethod": "automatic",
+      "status": "尚未見頃",
+      "observedDate": "2026-09-03",
+      "observationPrecision": "day",
+      "fetchedAt": "2026-10-24T02:13:50.720Z",
+      "sourceUrl": "https://weathernews.jp/koyo/spot/26111/",
+      "rawStatus": "まだ",
+      "retrievalError": null,
+      "sourceScope": "東福寺",
+      "sourceSpotName": "東福寺"
     },
     {
       "id": "sennyuji",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "ok",
+      "recordingMethod": "automatic",
+      "status": "尚未見頃",
+      "observedDate": "2026-10-23",
+      "observationPrecision": "day",
+      "fetchedAt": "2026-10-24T02:13:50.710Z",
+      "sourceUrl": "https://weathernews.jp/koyo/spot/26165/",
+      "rawStatus": "まだ",
+      "retrievalError": null,
+      "sourceScope": "総本山御寺泉涌寺",
+      "sourceSpotName": "総本山御寺泉涌寺"
     },
     {
       "id": "kiyomizu",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "ok",
+      "recordingMethod": "automatic",
+      "status": "尚未見頃",
+      "observedDate": "2026-09-03",
+      "observationPrecision": "day",
+      "fetchedAt": "2026-10-24T02:13:50.862Z",
+      "sourceUrl": "https://weathernews.jp/koyo/spot/26112/",
+      "rawStatus": "まだ",
+      "retrievalError": null,
+      "sourceScope": "清水寺",
+      "sourceSpotName": "清水寺"
     },
     {
       "id": "eikando",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "ok",
+      "recordingMethod": "automatic",
+      "status": "尚未見頃",
+      "observedDate": "2026-09-03",
+      "observationPrecision": "day",
+      "fetchedAt": "2026-10-24T02:13:50.832Z",
+      "sourceUrl": "https://weathernews.jp/koyo/spot/26120/",
+      "rawStatus": "まだ",
+      "retrievalError": null,
+      "sourceScope": "永観堂禅林寺",
+      "sourceSpotName": "永観堂禅林寺"
     },
     {
       "id": "nanzenji",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "ok",
+      "recordingMethod": "automatic",
+      "status": "尚未見頃",
+      "observedDate": "2026-09-03",
+      "observationPrecision": "day",
+      "fetchedAt": "2026-10-24T02:13:50.950Z",
+      "sourceUrl": "https://weathernews.jp/koyo/spot/26105/",
+      "rawStatus": "まだ",
+      "retrievalError": null,
+      "sourceScope": "南禅寺",
+      "sourceSpotName": "南禅寺"
     },
     {
       "id": "bishamondo",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "ok",
+      "recordingMethod": "automatic",
+      "status": "尚未見頃",
+      "observedDate": "2026-09-03",
+      "observationPrecision": "day",
+      "fetchedAt": "2026-10-24T02:13:50.991Z",
+      "sourceUrl": "https://weathernews.jp/koyo/spot/26152/",
+      "rawStatus": "まだ",
+      "retrievalError": null,
+      "sourceScope": "毘沙門堂門跡",
+      "sourceSpotName": "毘沙門堂門跡"
     },
     {
       "id": "nara",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "ok",
+      "recordingMethod": "automatic",
+      "status": "開始變色",
+      "observedDate": "2026-10-23",
+      "observationPrecision": "day",
+      "fetchedAt": "2026-10-24T02:13:51.066Z",
+      "sourceUrl": "https://weathernews.jp/koyo/spot/26402/",
+      "rawStatus": "色づき始め(全体の3割)",
+      "retrievalError": null,
+      "sourceScope": "奈良公園",
+      "sourceSpotName": "奈良公園"
     },
     {
       "id": "kasuga",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "ok",
+      "recordingMethod": "automatic",
+      "status": "開始變色",
+      "observedDate": "2026-10-19",
+      "observationPrecision": "day",
+      "fetchedAt": "2026-10-24T02:13:52.676Z",
+      "sourceUrl": "https://www.kasugataisha.or.jp/news/2026/16870/",
+      "rawStatus": "園内の紅葉、黄葉は、場所により少しずつ色づいてきました。",
+      "retrievalError": null,
+      "sourceScope": "萬葉植物園（春日大社境內；非全境）",
+      "sourceSpotName": "春日大社 萬葉植物園"
     },
     {
       "id": "isuien",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "unavailable",
+      "message": "已查詢依水園官方入口；尚無已驗證日期與狀態的紅葉觀測",
+      "sourceSpotName": "依水園",
+      "sourceUrl": "https://isuien.or.jp/",
+      "checkedAt": "2026-10-24T02:13:52.269Z"
     },
     {
       "id": "yoshikien",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "unavailable",
+      "message": "官方入口讀取失敗，尚無可驗證紅葉觀測：官方網站 HTTP 503",
+      "sourceSpotName": "吉城園（奈良縣官方入口）",
+      "sourceUrl": "https://www.pref.nara.jp/",
+      "checkedAt": "2026-10-24T02:13:55.253Z"
     },
     {
       "id": "shogunzuka",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "ok",
+      "recordingMethod": "automatic",
+      "status": "尚未見頃",
+      "observedDate": "2026-10-21",
+      "observationPrecision": "day",
+      "fetchedAt": "2026-10-24T02:13:51.092Z",
+      "sourceUrl": "https://weathernews.jp/koyo/spot/26141/",
+      "rawStatus": "まだ",
+      "retrievalError": null,
+      "sourceScope": "将軍塚青龍殿",
+      "sourceSpotName": "将軍塚青龍殿"
     },
     {
       "id": "gioji",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "ok",
+      "recordingMethod": "automatic",
+      "status": "尚未見頃",
+      "observedDate": "2026-09-03",
+      "observationPrecision": "day",
+      "fetchedAt": "2026-10-24T02:13:51.199Z",
+      "sourceUrl": "https://weathernews.jp/koyo/spot/26133/",
+      "rawStatus": "まだ",
+      "retrievalError": null,
+      "sourceScope": "祇王寺",
+      "sourceSpotName": "祇王寺"
     },
     {
       "id": "jojakkoji",
-      "state": "not_configured",
-      "message": "真實來源尚未完成驗證，目前沒有自動楓況記錄"
+      "state": "ok",
+      "recordingMethod": "automatic",
+      "status": "尚未見頃",
+      "observedDate": "2026-10-22",
+      "observationPrecision": "day",
+      "fetchedAt": "2026-10-24T02:13:51.277Z",
+      "sourceUrl": "https://weathernews.jp/koyo/spot/26134/",
+      "rawStatus": "まだ",
+      "retrievalError": null,
+      "sourceScope": "常寂光寺",
+      "sourceSpotName": "常寂光寺"
     }
   ]
 }

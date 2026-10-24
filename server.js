@@ -2,7 +2,12 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {createFoliageService} from './lib/foliage-service.js';
 import {createWeatherService} from './lib/weather-service.js';
-const service = createFoliageService();
+import {validateLiveFeed} from './public/foliage-feed.js';
+import {spots} from './public/spots.js';
+let initialFeed;
+try { initialFeed = validateLiveFeed(JSON.parse(await readFile(new URL('./public/data/foliage.json',import.meta.url),'utf8')),spots.map(s=>s.id)); }
+catch { console.warn('No readable saved foliage snapshot; fetching source observations.'); }
+const service = createFoliageService({initialFeed});
 const weather = createWeatherService();
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
 const files = {'/':'index.html','/index.html':'index.html','/app.js':'app.js','/style.css':'style.css','/spots.js':'spots.js','/foliage-feed.js':'foliage-feed.js','/weather-feed.js':'weather-feed.js','/source-config.js':'source-config.js'};

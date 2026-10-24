@@ -11,7 +11,7 @@
 5. 複製以 `/exec` 結尾的部署網址。`doGet` 只提供公開楓況欄位，沒有寫入操作，也不接受查詢參數切換工作表或抓取目標。試算表本身不必公開分享。
 6. 若要覆寫目前專案預設來源，在 App 設定貼上部署網址，或在 Node.js 後端設定 `FOLIAGE_FEED_URL`。後端未設定此變數時沿用共用預設，明確設為空字串則停用後端橋接。請將 `script.google.com` 和重新導向目的地 `script.googleusercontent.com` 加到執行環境的允許網域。請求應取得 `version:1` 及 13 筆 `results`；尚未填資料時是 `not_configured`，不是青葉。
 
-Apps Script 網頁應用程式不保證跨來源瀏覽器讀取。**建議由 Node.js 後端讀取橋接器，再提供同源 `/data/foliage.json`**。GitHub Pages 若無法直接讀取，需另設後端或排程產生靜態快照，不能靠試算表自動消除所有 CORS 問題。
+Apps Script 網頁應用程式不保證跨來源瀏覽器讀取。**Node.js 後端可讀取橋接器並提供同源 `/data/foliage.json`**。本專案另已提供日本來源擷取與 GitHub Pages 定時快照，見 [自動擷取說明](../automatic-foliage.md)；試算表只是補充，無法直接讀取時仍保留網站快照。
 
 更新程式後，須在「管理部署」將版本切換到新版本；只按儲存不會更新已部署版本。
 

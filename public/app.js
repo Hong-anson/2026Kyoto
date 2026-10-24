@@ -1,13 +1,13 @@
 import {spots} from './spots.js';
 import {defaultSheetFeedUrl,foliageReferenceUrls} from './source-config.js';
-import {validateLiveFeed,validSheetFeedUrl} from './foliage-feed.js';
+import {validateLiveFeed,validSheetFeedUrl,observationTime,observationIsStale} from './foliage-feed.js';
 import {validateWeatherFeed,fetchWeatherFeed,weatherCodeLabel} from './weather-feed.js';
 
 const $ = id => document.getElementById(id);
 const byId = id => spots.find(s => s.id === id);
 const esc = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const statuses = ['青葉', '轉黃', '轉紅', '見頃', '落葉'];
-const labels = {'青葉':'🟢 青葉','轉黃':'🟡 微黃','轉紅':'🟠 轉紅','見頃':'🍁 見頃','落葉':'🍂 落葉'};
+const statuses = ['尚未見頃', '青葉', '開始變色', '轉黃', '轉紅', '見頃', '開始落葉', '落葉'];
+const labels = {'尚未見頃':'◌ 尚未見頃','開始變色':'🍃 開始變色','開始落葉':'🍂 開始落葉','青葉':'🟢 青葉','轉黃':'🟡 微黃','轉紅':'🟠 轉紅','見頃':'🍁 見頃','落葉':'🍂 落葉'};
 let plan = [['tofukuji','sennyuji','kiyomizu'],['nanzenji','eikando','bishamondo'],['nara','kasuga','isuien']];
 let observations = {}, manual = {}, bookings = {}, originals = {}, day = 0, bookingId = '';
 let liveRows = {}, feedState = 'loading', checkedAt = null, refreshPending = null;
@@ -51,17 +51,27 @@ function obs(s) {
   const m = manual[s.id];
   const imported = observations[s.id];
   const live = liveRows[s.id]?.state === 'ok' ? {...liveRows[s.id], automatic:true} : null;
-  const sourced = live && (!imported || Date.parse(live.observedAt) >= Date.parse(imported.observedAt)) ? live : imported;
+  const sourced = live && (!imported || observationTime(live) >= observationTime(imported)) ? live : imported;
   const o = m ? {status:m.status, observedAt:m.updatedAt, manual:true} : sourced;
-  return o ? {...o, stale:Date.now() - Date.parse(o.observedAt) > 86400000} : null;
+  return o ? {...o, stale:observationIsStale(o)} : null;
 }
 function origin(o) { return o?.manual ? '手動標記' : o?.automatic ? o.recordingMethod === 'manual' ? '來源人工整理' : o.recordingMethod === 'automatic' ? '自動擷取來源' : '同步來源（記錄方式未註明）' : '匯入觀測'; }
+function mergeSourceRows(primary, supplement) {
+  const rows = new Map(primary.map(row=>[row.id,row]));
+  for (const row of supplement) {
+    const old = rows.get(row.id);
+    if (!old || (row.state==='ok' && (old.state!=='ok' || observationTime(row)>observationTime(old) || (observationTime(row)===observationTime(old) && Date.parse(row.fetchedAt)>=Date.parse(old.fetchedAt))))) rows.set(row.id,row);
+    else if (old.state!=='ok' && row.state==='unavailable' && old.state==='not_configured') rows.set(row.id,row);
+  }
+  return [...rows.values()];
+}
+function observationLabel(row) { return row.observationPrecision==='day' ? `${row.observedDate}（日本日期；來源未提供時間）` : new Date(row.observedAt).toLocaleString('zh-TW'); }
 function keepPrevious(previous, incoming, message) {
   const rows = Object.fromEntries(incoming.map(row=>[row.id,row]));
   for (const {id} of spots) {
     if (rows[id]?.state === 'ok' && previous[id]?.state === 'ok') {
-      const oldTime = Date.parse(previous[id].observedAt || previous[id].current?.modelAt);
-      const nextTime = Date.parse(rows[id].observedAt || rows[id].current?.modelAt);
+      const oldTime = previous[id].current ? Date.parse(previous[id].current.modelAt) : observationTime(previous[id]);
+      const nextTime = rows[id].current ? Date.parse(rows[id].current.modelAt) : observationTime(rows[id]);
       if (nextTime < oldTime || (nextTime === oldTime && Date.parse(rows[id].fetchedAt) < Date.parse(previous[id].fetchedAt))) {
         rows[id] = {...previous[id],retrievalError:'來源回傳較舊資料，保留較新記錄與原始時間'};
       }
@@ -85,10 +95,11 @@ async function refreshLive() {
         try {
           const bridge = await fetch(defaultSheetFeedUrl, {cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(15000)});
           if (!bridge.ok) throw Error('共用來源讀取失敗');
-          feed = validateLiveFeed(await bridge.json(), spots.map(s=>s.id));
+          const extra = validateLiveFeed(await bridge.json(), spots.map(s=>s.id));
+          feed = {version:1,results:mergeSourceRows(feed.results,extra.results)};
         } catch (error) {
           if (!feed.results.some(row=>row.state==='ok')) throw error;
-          feed.results = feed.results.map(row=>row.state==='ok' ? {...row,retrievalError:'共用來源暫時無法讀取，顯示網站部署的快照；請核對觀測時間'} : row);
+          feed.results = feed.results.map(row=>row.state==='ok' ? {...row,retrievalError:'試算表補充資料暫時無法讀取，保留自動擷取的來源記錄與日期'} : row);
         }
       }
       if (generation !== feedGeneration) return;
@@ -175,21 +186,23 @@ function render() {
   $('whole-route').href = route; $('bottom-route').href = route;
   $('cards').innerHTML = items.map((s,i) => {
     const o=obs(s), key=`${day}-${i}`, booking=bookings[s.id];
-    const status = o ? `${labels[o.status] || o.status} · ${o.stale?'已過期':o.manual?'手動':o.automatic?'同步來源':'匯入'}` : '◌ 紅葉待確認';
+    const status = o ? `${labels[o.status] || o.status} · ${o.stale?(o.observationPrecision==='day'?'較舊日期':'已過期'):o.manual?'手動':o.automatic?'同步來源':'匯入'}` : liveRows[s.id]?.checkedAt ? '◌ 尚無可用觀測' : '◌ 紅葉待確認';
     return `<article class="card" data-spot="${s.id}"><div class="card-top"><div><div class="index">STOP 0${i+1} / ${s.area}</div><h3>${s.name}</h3><div class="english">${s.en}</div></div><span class="status">${esc(status)}</span></div>
-    ${weatherHtml(s)}<div class="status-control"><label>手動標記楓況 <select data-status="${s.id}" aria-label="${s.name}手動楓況"><option value="">使用來源資料／待確認</option>${statuses.map(v=>`<option value="${v}" ${manual[s.id]?.status===v?'selected':''}>${labels[v]}</option>`).join('')}</select></label><small>手動標記優先顯示；選「使用來源資料」可恢復自動／匯入記錄。</small></div>
-    <p>${s.note}</p><div class="meta">☀ 日間｜${s.hours}<br>🌙 夜間｜${['kiyomizu','eikando','shogunzuka'].includes(s.id)?'可能有季節限定夜間拜觀；2026 場次、時間及票務待官網確認':'未確認夜間開放，請勿以日間票推定可夜間入場'}<br>▤ 預約與票務｜${link(s.url,'查閱官方公告')}<br>◉ 人潮｜尚無自動即時資料${o?`<br>楓況記錄｜${esc(new Date(o.observedAt).toLocaleString('zh-TW'))} · ${o.manual?'個人手動標記':link(o.sourceUrl,origin(o))}${o.automatic?`<br>來源原文｜${esc(o.rawStatus)}<br>讀取時間｜${esc(new Date(o.fetchedAt).toLocaleString('zh-TW'))}${o.retrievalError?`<br>⚠ ${esc(o.retrievalError)}`:''}`:''}`:''}</div>
-    ${liveRows[s.id]?.state!=='ok'?`<div class="feed-note">同步楓況：${esc(liveRows[s.id]?.state==='not_configured'?'尚無可驗證的楓況觀測':liveRows[s.id]?.message || (feedState==='error'?'服務讀取失敗，請稍後重試':'尚未取得來源資料'))} · ${link(foliageReferenceUrls[s.id] || s.url,'查看來源參考頁')}</div>`:''}<div class="booking"><span>預約序號：${booking?'已儲存（點編輯查看）':'尚未填寫'}</span><button data-booking="${s.id}">${booking?'編輯':'新增'}序號</button></div>
+    ${o?.sourceScope?`<div class="observation-scope">來源觀測範圍：${esc(o.sourceScope)}</div>`:''}${weatherHtml(s)}<div class="status-control"><label>手動標記楓況 <select data-status="${s.id}" aria-label="${s.name}手動楓況"><option value="">使用來源資料／待確認</option>${statuses.map(v=>`<option value="${v}" ${manual[s.id]?.status===v?'selected':''}>${labels[v]}</option>`).join('')}</select></label><small>手動標記優先顯示；選「使用來源資料」可恢復自動／匯入記錄。</small></div>
+    <p>${s.note}</p><div class="meta">☀ 日間｜${s.hours}<br>🌙 夜間｜${['kiyomizu','eikando','shogunzuka'].includes(s.id)?'可能有季節限定夜間拜觀；2026 場次、時間及票務待官網確認':'未確認夜間開放，請勿以日間票推定可夜間入場'}<br>▤ 預約與票務｜${link(s.url,'查閱官方公告')}<br>◉ 人潮｜尚無自動即時資料${o?`<br>楓況記錄｜${esc(observationLabel(o))} · ${o.manual?'個人手動標記':link(o.sourceUrl,origin(o))}${o.automatic?`<br>來源原文｜${esc(o.rawStatus)}${o.stale?'<br><strong>此為較舊來源記錄，不能當作今日現況。</strong>':''}<br>讀取時間｜${esc(new Date(o.fetchedAt).toLocaleString('zh-TW'))}${o.retrievalError?`<br>⚠ ${esc(o.retrievalError)}`:''}`:''}`:''}</div>
+    ${liveRows[s.id]?.state!=='ok'?`<div class="feed-note">自動查詢：${esc(liveRows[s.id]?.state==='not_configured'?'尚無可驗證的楓況觀測':liveRows[s.id]?.message || (feedState==='error'?'服務讀取失敗，請稍後重試':'尚未取得來源資料'))}${liveRows[s.id]?.checkedAt?`<br>查詢時間：${esc(japanTime(liveRows[s.id].checkedAt))} 日本時間`:''} · ${link(liveRows[s.id]?.sourceUrl || foliageReferenceUrls[s.id] || s.url,'查看來源參考頁')}</div>`:''}<div class="booking"><span>預約序號：${booking?'已儲存（點編輯查看）':'尚未填寫'}</span><button data-booking="${s.id}">${booking?'編輯':'新增'}序號</button></div>
     <div class="actions">${link(map(s),'Google Maps')}${link(map(s),'Google 熱門程度')}${link(s.url,'景點官網')}</div>
     <details class="sources"><summary>查楓況照片與現場人潮</summary><div class="actions">${link('https://weathernews.jp/koyo/','Weathernews 楓況入口')}${s.area.startsWith('京都')?link(foliageReferenceUrls[s.id] || 'https://souda-kyoto.jp/',foliageReferenceUrls[s.id]?'JR 東海景點資料':'JR 東海京都入口'):''}${link(search(s.map+' 紅葉 今日 写真'),'搜尋最新楓況照片')}${link('https://www.youtube.com/results?search_query='+encodeURIComponent(s.map+' ライブカメラ'),'YouTube 直播搜尋')}${s.area.startsWith('京都')?link('https://ja.kyoto.travel/comfort/','京都官方快適度資訊'):''}</div><small>入口與搜尋結果不保證涵蓋此景點。請核對拍攝地點、日期及直播標記；Maps 熱門程度與官方資訊可能為預測或歷史資料。</small></details>
     ${alternativeHtml(s)}${originals[key]?`<button class="restore" data-restore="${i}">↩ 還原原景點：${byId(originals[key]).name}</button>`:''}</article>
     ${i<items.length-1?`<div class="transfer">↓ ${s.name} → ${items[i+1].name}<br>${link(directions(s,items[i+1]),'Google 路線導航 · 大眾運輸')}<small>車次、轉乘與時間由 Google Maps 即時計算</small></div>`:''}`;
   }).join('');
   $('suggestions').innerHTML = '<p>備案現在直接顯示於需要應變的景點下方。替換後可一鍵還原，並同步更新前後站導航。</p>';
-  $('freshness').textContent = `同步 ${Object.values(liveRows).filter(r=>r.state==='ok').length} · 手動 ${Object.keys(manual).length} · 匯入 ${Object.keys(observations).length}`;
-  $('feed-status').textContent = feedState === 'loading' ? '正在檢查來源資料…' : feedState === 'error' ? '楓況同步失敗；保留既有記錄，不更新觀測時間。請檢查來源部署權限與網路。' : feedState === 'available' ? '已讀取來源快照；保留記錄方式與原始觀測時間，超過 24 小時標記過期。' : '資料讀取完成，目前尚無有效楓況觀測；參考網址與實際觀測分開顯示。';
+  const sourcedRows = Object.values(liveRows).filter(row=>row.state==='ok');
+  const recentRows = sourcedRows.filter(row=>!observationIsStale(row));
+  $('freshness').textContent = `來源 ${Object.values(liveRows).filter(r=>r.state==='ok').length} · 手動 ${Object.keys(manual).length} · 匯入 ${Object.keys(observations).length}`;
+  $('feed-status').textContent = feedState === 'loading' ? '正在檢查來源資料…' : feedState === 'error' ? '楓況同步失敗；保留既有記錄，不更新觀測時間。請檢查來源部署權限與網路。' : feedState === 'available' ? `已取得 ${sourcedRows.length} 站來源記錄，其中 ${recentRows.length} 站符合本頁時效；請核對來源日期與範圍，較舊記錄不當作今日現況。` : '資料讀取完成，目前尚無有效楓況觀測；參考網址與實際觀測分開顯示。';
   $('weather-status').textContent = !weatherEnabled ? '天氣自動更新已關閉。' : weatherState === 'loading' ? '正在讀取景點附近天氣…' : weatherState === 'available' ? '天氣每 15 分鐘讀取；為模式資料，不據此判定楓況。' : '天氣更新未成功；舊資料會保留原始時間。';
-  $('source-description').textContent = sheetUrl ? '目前使用你設定的 Google Sheets 橋接來源；開啟與每 15 分鐘自動讀取。' : defaultSheetFeedUrl ? '目前使用共用試算表來源；開啟與每 15 分鐘自動讀取。未填有效觀測的景點維持待確認。' : '目前使用網站內建的楓況資料；尚未設定試算表橋接來源。';
+  $('source-description').textContent = sheetUrl ? '目前使用你設定的 Google Sheets 橋接來源；開啟與每 15 分鐘自動讀取。' : defaultSheetFeedUrl ? '目前讀取日本來源的自動擷取結果，每小時更新；試算表可補充觀測，較新記錄優先。' : '目前使用網站內建的楓況資料；尚未設定試算表橋接來源。';
   $('feed-checked').textContent = checkedAt ? `服務檢查：${checkedAt.toLocaleString('zh-TW')}（非觀測時間）` : '';
 
 }
@@ -216,7 +229,7 @@ $('source-form').onsubmit = async e => {
   store('kyoto-sheet-url', sheetUrl);
   liveRows = {}; checkedAt = null; feedState = 'loading';
   store('kyoto-live-cache', {url:sheetUrl || defaultSheetFeedUrl,feed:{version:1,results:[]}});
-  $('source-feedback').textContent = value ? '已儲存在此瀏覽器，正在測試讀取…' : '已恢復網站內建楓況來源。';
+  $('source-feedback').textContent = value ? '已儲存在此瀏覽器，正在測試讀取…' : '已恢復日本來源自動擷取結果。';
   render();
   if (pending) await pending;
   await refreshLive();
