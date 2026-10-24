@@ -22,13 +22,13 @@
 
 ## 首次啟用
 
-儲存庫的 GitHub Pages 發布來源必須選 **GitHub Actions**（API 的 `build_type: workflow`）；由原本的 branch 發布方式切換後，執行：
+此儲存庫已成功執行擷取、快照保存及 artifact 發布。現有 Pages 仍回報 branch 模式，但已實測接受本工作流程直接發布；不需要為目前功能再修改設定。手動執行：
 
 ```sh
 gh workflow run refresh-foliage.yml --repo Hong-anson/2026Kyoto --ref main
 ```
 
-這是由有權限的儲存庫使用者或目前已授權的發布工具執行；不需要在聊天中提供 token。儲存庫需允許工作流程使用 `contents: write` 儲存快照，並允許 `github-pages` 環境發布。若平台拒絕新增工作流程檔案，應補齊該整合的 workflow 權限，不要停用驗證或改用公開寫入 API。
+新儲存庫建議將 Pages 發布來源選為 **GitHub Actions**。上述命令由有權限的儲存庫使用者或已授權的發布工具執行；不需要在聊天中提供 token。儲存庫需允許工作流程使用 `contents: write` 儲存快照，並允許 `github-pages` 環境發布。若平台拒絕新增工作流程檔案，應補齊該整合的 workflow 權限，不要停用驗證或改用公開寫入 API。
 
 手動查看最近執行與正式網站：
 

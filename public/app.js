@@ -14,7 +14,9 @@ let liveRows = {}, feedState = 'loading', checkedAt = null, refreshPending = nul
 let weatherRows = {}, weatherState = 'loading', weatherPending = null;
 let feedGeneration = 0;
 const storedSheetUrl = load('kyoto-sheet-url', '');
-let sheetUrl = validSheetFeedUrl(storedSheetUrl) ? storedSheetUrl : '';
+// Earlier releases asked users to paste the shared bridge. Treat that same
+// deployment as the built-in supplement so existing users receive auto data.
+let sheetUrl = validSheetFeedUrl(storedSheetUrl) && storedSheetUrl !== defaultSheetFeedUrl ? storedSheetUrl : '';
 let weatherEnabled = load('kyoto-weather-enabled', true) !== false;
 function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
 const saved = load('kyoto-plan', null);
@@ -225,11 +227,12 @@ $('source-form').onsubmit = async e => {
   if (value && !validSheetFeedUrl(value)) { $('source-feedback').textContent = '請貼上 https://script.google.com/macros/s/部署ID/exec 網址，不可含帳密或查詢參數。'; return; }
   const pending = refreshPending;
   feedGeneration++;
-  sheetUrl = value;
+  sheetUrl = value === defaultSheetFeedUrl ? '' : value;
+  $('sheet-url').value = sheetUrl;
   store('kyoto-sheet-url', sheetUrl);
   liveRows = {}; checkedAt = null; feedState = 'loading';
   store('kyoto-live-cache', {url:sheetUrl || defaultSheetFeedUrl,feed:{version:1,results:[]}});
-  $('source-feedback').textContent = value ? '已儲存在此瀏覽器，正在測試讀取…' : '已恢復日本來源自動擷取結果。';
+  $('source-feedback').textContent = sheetUrl ? '已儲存在此瀏覽器，正在測試讀取…' : '已恢復日本來源自動擷取結果。';
   render();
   if (pending) await pending;
   await refreshLive();
